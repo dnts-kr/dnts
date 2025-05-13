@@ -1,81 +1,47 @@
 const WebSocket = require('ws');
-const sendAlert = require('./telegramNotifier');
-const fetchNewsForTicker = require('./newsFetcher');
+const fs = require('fs');
+const path = require('path');
+const { bot } = require('./telegramNotifier');
 
-// 매개변수를 받도록 함수 시그니처 수정
-function startMonitor(dbClient, telegramBot) {
-  const API_KEY = process.env.POLYGON_API_KEY;
-  console.log("🔐 POLYGON_API_KEY:", API_KEY ? "[OK]" : "❌ 없음");
+const polygonApiKey = process.env.POLYGON_API_KEY;
 
-  const socket = new WebSocket(`wss://socket.polygon.io/stocks`);
+module.exports = async function startMonitor(dbClient, telegramBot) {
+  const POLYGON_SOCKET_URL = 'wss://socket.polygon.io/stocks';
+  const ws = new WebSocket(POLYGON_SOCKET_URL);
 
-  socket.on('open', () => {
+  // ✅ NASDAQ/NYSE/AMEX 전용 티커 목록 로드
+  const tickerPath = path.join(__dirname, '../tickers.json');
+  const symbols = JSON.parse(fs.readFileSync(tickerPath, 'utf8'));
+  const tradableSymbols = symbols
+    .filter(t => ['NASDAQ', 'NYSE', 'AMEX'].includes(t.primary_exchange))
+    .map(t => `T.${t.ticker}`);
+
+  ws.on('open', () => {
     console.log('✅ WebSocket 연결됨');
-    // 인증
-    socket.send(JSON.stringify({ action: 'auth', params: API_KEY }));
+    ws.send(JSON.stringify({ action: 'auth', params: polygonApiKey }));
 
-    // 모든 티커 구독
-    socket.send(JSON.stringify({
-      action: 'subscribe',
-      params: 'T.*'  // 모든 티커 트랜잭션 구독
-    }));
-  });
-
-  socket.on('message', async (data) => {
-    let messages;
-    try {
-      messages = JSON.parse(data);
-      if (!Array.isArray(messages)) {
-        messages = [messages];
-      }
-    } catch (error) {
-      console.error('❌ JSON 파싱 오류:', error.message);
-      return;
+    const chunkSize = 400; // Polygon 요청 제한 회피용
+    for (let i = 0; i < tradableSymbols.length; i += chunkSize) {
+      const chunk = tradableSymbols.slice(i, i + chunkSize);
+      ws.send(JSON.stringify({ action: 'subscribe', params: chunk.join(',') }));
     }
 
-    for (const message of messages) {
-      if (message.ev === 'status') {
-        console.log(`🔐 ${message.message}`);
-      }
-
-      if (message.ev === 'T') {
-        const symbol = message.sym;
-        const price = message.p;
-        const volume = message.v;
-        const changeFlag = message.c ? message.c[0] : 0;
-
-        // 감지 조건 예시 - 큰 거래량과 가격 변화
-        if (Math.abs(changeFlag) === 2 && volume > 50000) {
-          console.log(`🚨 감지됨: ${symbol} (${price}, ${volume}주, 변화플래그: ${changeFlag})`);
-
-          try {
-            // 실제 뉴스 데이터 가져오기
-            const news = await fetchNewsForTicker(symbol);
-            console.log(`📰 ${symbol}에 대한 뉴스 ${news.length}개 검색됨`);
-            
-            // 알림 보내기
-            await sendAlert(symbol, price, news);
-          } catch (error) {
-            console.error(`❌ ${symbol} 처리 중 오류:`, error.message);
-          }
-        }
-      }
-    }
+    console.log(`📡 총 ${tradableSymbols.length} 종목 구독 요청 완료`);
   });
 
-  socket.on('error', (err) => {
-    console.error('❌ WebSocket 오류:', err.message);
+  ws.on('message', async (raw) => {
+    const data = JSON.parse(raw);
+    // 여기서 급등 조건 감지 & 알림 처리
   });
 
-  socket.on('close', () => {
-    console.warn('⚠️ WebSocket 연결 종료됨. 재연결 시도 중...');
-    setTimeout(() => {
-      process.exit(1); // Railway가 자동 재시작하도록 종료
-    }, 5000);
+  ws.on('error', (err) => {
+    console.error('❌ WebSocket 오류:', err);
   });
-  
-  // 성공적으로 시작되었음을 알리기 위해 Promise 반환
-  return Promise.resolve();
-}
 
-module.exports = startMonitor;
+  ws.on('close', () => {
+    console.warn('⚠️ WebSocket 연결 종료됨');
+  });
+
+  process.once('SIGINT', () => ws.close());
+  process.once('SIGTERM', () => ws.close());
+};
