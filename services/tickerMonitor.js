@@ -41,11 +41,10 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
     for (let i = 0; i < tradableSymbols.length; i += chunkSize) {
       const chunk = tradableSymbols.slice(i, i + chunkSize);
       const joined = chunk.join(',');
-      console.log(`📡 구독 요청 (${i} ~ ${i + chunkSize - 1})`);
       socket.send(JSON.stringify({ action: 'subscribe', params: joined }));
     }
 
-    console.log('🚀 모든 종목 구독 요청 완료');
+    console.log(`✅ 총 ${tradableSymbols.length}종목에 대해 구독 요청 완료`);
   });
 
   socket.on('message', async (data) => {
@@ -60,7 +59,9 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
 
     for (const msg of messages) {
       if (msg.ev === 'status') {
-        console.log(`🔐 ${msg.message}`);
+        if (!msg.message.startsWith('subscribed to: T.')) {
+          console.log(`🔐 ${msg.message}`);
+        }
       }
 
       if (msg.ev === 'T') {
@@ -90,7 +91,7 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
 
   socket.on('close', () => {
     console.warn('⚠️ WebSocket 연결 종료됨. 재시작 시도 중...');
-    setTimeout(() => process.exit(1), 5000); // Railway가 자동 재시작
+    setTimeout(() => process.exit(1), 5000);
   });
 
   process.once('SIGINT', () => socket.close());
