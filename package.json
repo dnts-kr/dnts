@@ -1,0 +1,27 @@
+{
+  "name": "stock_surge_mvp_package_full",
+  "version": "1.0.0",
+  "description": "US stock surge notifier with Telegram and OpenAI translation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "update-tickers": "node fetchAllTickers.js"
+  },
+  "dependencies": {
+    "axios": "^1.4.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "node-fetch": "^2.6.7",
+    "node-telegram-bot-api": "^0.61.0",
+    "openai": "^4.21.0",
+    "pg": "^8.15.6",
+    "tr46": "^0.0.3",
+    "webidl-conversions": "^3.0.1",
+    "whatwg-url": "^5.0.0",
+    "ws": "^8.18.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
