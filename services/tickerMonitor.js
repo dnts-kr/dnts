@@ -11,7 +11,7 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
   let tradableSymbols = [];
 
   try {
-    const exchanges = ['XNAS', 'XNYS', 'XASE']; // 나스닥, 뉴욕, 아멕스
+    const exchanges = ['XNAS', 'XNYS', 'XASE'];
     let url = `https://api.polygon.io/v3/reference/tickers?market=stocks&active=true&limit=1000&apiKey=${polygonApiKey}`;
     let results = [];
 
@@ -32,6 +32,7 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
   }
 
   const socket = new WebSocket('wss://socket.polygon.io/stocks');
+  let subscribeConfirmed = 0;
 
   socket.on('open', () => {
     console.log('✅ WebSocket 연결됨');
@@ -59,7 +60,12 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
 
     for (const msg of messages) {
       if (msg.ev === 'status') {
-        if (!msg.message.startsWith('subscribed to: T.')) {
+        if (msg.message.startsWith('subscribed to: ')) {
+          subscribeConfirmed++;
+          if (subscribeConfirmed % 500 === 0 || subscribeConfirmed === tradableSymbols.length) {
+            console.log(`📶 구독 완료 수: ${subscribeConfirmed} / ${tradableSymbols.length}`);
+          }
+        } else {
           console.log(`🔐 ${msg.message}`);
         }
       }
