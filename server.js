@@ -8,13 +8,17 @@ const indexRouter = require('./routes/index');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// ✅ 전역 상태 변수 등록
+global.subscriptionCount = 0;
+const startTime = Date.now();
+
 // PostgreSQL 클라이언트
 const dbClient = new Client({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// 필수 환경변수 검사
+// 환경변수 검증
 const validateEnvVars = () => {
   const requiredVars = {
     'TELEGRAM_BOT_TOKEN': process.env.TELEGRAM_BOT_TOKEN,
@@ -34,7 +38,28 @@ const validateEnvVars = () => {
   return allValid;
 };
 
-// 서버 시작
+// ✅ 이 위치에 /status 라우트 포함시키세요
+app.get('/status', async (req, res) => {
+  const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+  let dbConnected = false;
+
+  try {
+    await dbClient.query('SELECT 1');
+    dbConnected = true;
+  } catch (_) {
+    dbConnected = false;
+  }
+
+  res.status(200).json({
+    status: "✅ Server is alive",
+    env: process.env.NODE_ENV,
+    uptime: `${uptimeSeconds}s`,
+    subscriptionCount: global.subscriptionCount,
+    dbConnected
+  });
+});
+
+// 서버 시작 함수
 const startServer = async () => {
   try {
     if (!validateEnvVars()) throw new Error('Missing required environment variables');
@@ -49,16 +74,10 @@ const startServer = async () => {
     app.use(express.json());
     app.use('/', indexRouter);
 
-    // 헬스 체크 라우트 (Railway용)
-    app.get('/status', (req, res) => {
-      res.status(200).send('✅ Server is alive and monitoring stocks.');
-    });
-
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
 
-    // 실시간 주식 모니터링 시작
     try {
       console.log('🔍 Starting stock monitoring service...');
       await startMonitor(dbClient, telegramBot);
@@ -67,7 +86,7 @@ const startServer = async () => {
       console.error('❌ Failed to start monitoring service:', err);
     }
 
-    // 텔레그램 봇 실행 (production 환경에서만)
+    // ✅ Telegram 봇 launch (production에서만)
     if (telegramBot.launch && process.env.NODE_ENV === 'production') {
       await telegramBot.launch();
       console.log('🤖 Telegram bot is running');
@@ -85,7 +104,6 @@ process.once('SIGINT', () => {
   telegramNotifier.bot.stop && telegramNotifier.bot.stop('SIGINT');
   dbClient.end();
 });
-
 process.once('SIGTERM', () => {
   telegramNotifier.bot.stop && telegramNotifier.bot.stop('SIGTERM');
   dbClient.end();
