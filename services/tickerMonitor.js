@@ -32,7 +32,9 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
   }
 
   const socket = new WebSocket('wss://socket.polygon.io/stocks');
-  let subscribeConfirmed = 0;
+
+  // ✅ 전역 구독 완료 수 초기화
+  global.subscriptionCount = 0;
 
   socket.on('open', () => {
     console.log('✅ WebSocket 연결됨');
@@ -61,9 +63,12 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
     for (const msg of messages) {
       if (msg.ev === 'status') {
         if (msg.message.startsWith('subscribed to: ')) {
-          subscribeConfirmed++;
-          if (subscribeConfirmed % 500 === 0 || subscribeConfirmed === tradableSymbols.length) {
-            console.log(`📶 구독 완료 수: ${subscribeConfirmed} / ${tradableSymbols.length}`);
+          global.subscriptionCount++;  // ✅ 구독 완료 수 증가
+          if (
+            global.subscriptionCount % 500 === 0 ||
+            global.subscriptionCount === tradableSymbols.length
+          ) {
+            console.log(`📶 구독 완료 수: ${global.subscriptionCount} / ${tradableSymbols.length}`);
           }
         } else {
           console.log(`🔐 ${msg.message}`);
