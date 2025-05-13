@@ -8,11 +8,13 @@ const indexRouter = require('./routes/index');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// PostgreSQL 클라이언트
 const dbClient = new Client({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
+// 필수 환경변수 검사
 const validateEnvVars = () => {
   const requiredVars = {
     'TELEGRAM_BOT_TOKEN': process.env.TELEGRAM_BOT_TOKEN,
@@ -32,11 +34,10 @@ const validateEnvVars = () => {
   return allValid;
 };
 
+// 서버 시작
 const startServer = async () => {
   try {
-    if (!validateEnvVars()) {
-      throw new Error('Missing required environment variables');
-    }
+    if (!validateEnvVars()) throw new Error('Missing required environment variables');
 
     await dbClient.connect();
     console.log('✅ Database connected successfully');
@@ -48,7 +49,7 @@ const startServer = async () => {
     app.use(express.json());
     app.use('/', indexRouter);
 
-    // ✅ 헬스체크 라우트 추가
+    // 헬스 체크 라우트 (Railway용)
     app.get('/status', (req, res) => {
       res.status(200).send('✅ Server is alive and monitoring stocks.');
     });
@@ -57,16 +58,17 @@ const startServer = async () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
 
-    // ✅ 실시간 모니터링 시작
+    // 실시간 주식 모니터링 시작
     try {
       console.log('🔍 Starting stock monitoring service...');
       await startMonitor(dbClient, telegramBot);
       console.log('✅ Monitoring service started successfully');
-    } catch (error) {
-      console.error('❌ Failed to start monitoring service:', error);
+    } catch (err) {
+      console.error('❌ Failed to start monitoring service:', err);
     }
 
-    if (telegramBot.launch) {
+    // 텔레그램 봇 실행 (production 환경에서만)
+    if (telegramBot.launch && process.env.NODE_ENV === 'production') {
       await telegramBot.launch();
       console.log('🤖 Telegram bot is running');
     }
