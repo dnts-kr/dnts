@@ -11,8 +11,7 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
   let tradableSymbols = [];
 
   try {
-    // v3 API에서 전체 티커 불러오기 (1000개 제한 → 반복 처리 필요)
-    const exchanges = ['XNAS', 'XNYS', 'XASE']; // NASDAQ, NYSE, AMEX
+    const exchanges = ['XNAS', 'XNYS', 'XASE']; // 나스닥, 뉴욕, 아멕스
     let url = `https://api.polygon.io/v3/reference/tickers?market=stocks&active=true&limit=1000&apiKey=${polygonApiKey}`;
     let results = [];
 
@@ -38,13 +37,15 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
     console.log('✅ WebSocket 연결됨');
     socket.send(JSON.stringify({ action: 'auth', params: polygonApiKey }));
 
-    const chunkSize = 400;
+    const chunkSize = 5000;
     for (let i = 0; i < tradableSymbols.length; i += chunkSize) {
       const chunk = tradableSymbols.slice(i, i + chunkSize);
-      socket.send(JSON.stringify({ action: 'subscribe', params: chunk.join(',') }));
+      const joined = chunk.join(',');
+      console.log(`📡 구독 요청 (${i} ~ ${i + chunkSize - 1})`);
+      socket.send(JSON.stringify({ action: 'subscribe', params: joined }));
     }
 
-    console.log('📡 종목 구독 요청 완료');
+    console.log('🚀 모든 종목 구독 요청 완료');
   });
 
   socket.on('message', async (data) => {
@@ -88,8 +89,8 @@ module.exports = async function startMonitor(dbClient, telegramBot) {
   });
 
   socket.on('close', () => {
-    console.warn('⚠️ WebSocket 종료됨. 재시작 시도 중...');
-    setTimeout(() => process.exit(1), 5000); // Railway 재시작 유도
+    console.warn('⚠️ WebSocket 연결 종료됨. 재시작 시도 중...');
+    setTimeout(() => process.exit(1), 5000); // Railway가 자동 재시작
   });
 
   process.once('SIGINT', () => socket.close());
